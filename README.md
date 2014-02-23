@@ -1,4 +1,5 @@
-*tahoe-pi*
+tahoe-pi
+========
 
 Basic car computer for my Chevy Tahoe. Records GPS data from gpsd
 and engine data from an STN1110 IC.

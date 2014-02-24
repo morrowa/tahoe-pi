@@ -1,18 +1,16 @@
 // rust interface to gps.h
 // c library for communicating with GPSD
 
-use std::libc::c_int;
-use std::libc::c_double;
-use std::libc::c_void;
-use std::libc::uint64_t;
-use std::libc::c_char;
-use std::libc::c_uint;
+use std::c_str;
+use std::ptr;
+use std::mem;
+use std::libc::{c_int, c_double, c_void, uint64_t, c_char, c_uint, malloc, free, size_t};
 
 static MAXCHANNELS: u32 = 72;
 static MAXTAGLEN: u32 = 8;
 static GPS_PATH_MAX: u32 = 128;
 
-pub struct gps_fix_t {
+struct gps_fix_t {
 	time: c_double,
 	mode: c_int,
 	ept: c_double,
@@ -30,7 +28,7 @@ pub struct gps_fix_t {
 	epc: c_double
 }
 
-pub struct dop_t {
+struct dop_t {
 	xdop: c_double,
 	ydop: c_double,
 	pdop: c_double,
@@ -40,7 +38,7 @@ pub struct dop_t {
 	gdop: c_double
 }
 
-pub struct devconfig_t {
+struct devconfig_t {
 	path: [c_char, ..GPS_PATH_MAX],
 	flags: c_int,
 	driver: [c_char, ..64],
@@ -54,7 +52,7 @@ pub struct devconfig_t {
 	driver_mode: c_int
 }
 
-pub struct policy_t {
+struct policy_t {
 	watcher: c_int,
 	json: c_int,
 	nmea: c_int,
@@ -66,7 +64,7 @@ pub struct policy_t {
 	remote: [c_char, ..GPS_PATH_MAX]
 }
 
-pub struct gps_data_t {
+struct gps_data_t {
 	set: uint64_t,
 	online: c_double,
 	gps_fd: *c_void,
@@ -92,10 +90,63 @@ pub struct gps_data_t {
 
 #[link(name = "gps")]
 extern {
-	pub fn gps_open(server: *c_char, port: *c_char, gps_data: &gps_data_t) -> c_int;
-	pub fn gps_read(gps_data: &gps_data_t) -> c_int;
-	pub fn gps_close(gps_data: &gps_data_t) -> c_int;
+	fn gps_open(server: *c_char, port: *c_char, gps_data: *mut gps_data_t) -> c_int;
+	fn gps_read(gps_data: *mut gps_data_t) -> c_int;
+	fn gps_close(gps_data: *mut gps_data_t) -> c_int;
 
 	pub fn earth_distance(lat1: c_double, lon1: c_double, lat2: c_double, lon2: c_double) -> c_double;
+}
+
+pub struct Fix {
+	time: f64,
+	mode: u8,
+	latitude: f64,
+	longitude: f64,
+	altitude: f64
+}
+
+pub struct Client {
+	priv state: *gps_data_t
+}
+
+impl Client {
+	pub fn new() -> Client {
+		let client = unsafe { Client { state: malloc(mem::size_of::<gps_data_t>() as size_t) as *gps_data_t } };
+		client.open();
+		client
+	}
+
+	fn open(&self) {
+		let hostname = "shared memory";
+		let c_hostname = hostname.to_c_str();
+
+		let return_code = c_hostname.with_ref(|c_buffer| {
+			unsafe { gps_open(c_buffer, ptr::null(), self.state as *mut gps_data_t) }
+		});
+
+		if return_code != 0 {
+			fail!("gps::Client::new() could not connect to gpsd");
+		}
+	}
+
+	pub fn read(&self) -> Option<Fix> {
+		let bytes_read = unsafe { gps_read(self.state as *mut gps_data_t) };
+
+		if bytes_read >= 0 {
+			Some(Fix {time: 1.0, mode: 1, latitude: 2.0, longitude: 2.0, altitude: 2.0})
+		} else {
+			None
+		}
+	}
+}
+
+#[unsafe_destructor]
+impl Drop for Client {
+	fn drop(&mut self) {
+		unsafe {
+			gps_close(self.state as *mut gps_data_t);
+			free(self.state as *c_void)
+		}
+	}
 }
 

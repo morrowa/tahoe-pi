@@ -1,7 +1,6 @@
 // rust interface to gps.h
 // c library for communicating with GPSD
 
-use std::c_str;
 use std::ptr;
 use std::mem;
 use std::libc::{c_int, c_double, c_void, uint64_t, c_char, c_uint, malloc, free, size_t};
@@ -133,7 +132,14 @@ impl Client {
 		let bytes_read = unsafe { gps_read(self.state as *mut gps_data_t) };
 
 		if bytes_read >= 0 {
-			Some(Fix {time: 1.0, mode: 1, latitude: 2.0, longitude: 2.0, altitude: 2.0})
+			let raw_fix = unsafe { (*(self.state)).fix };
+			Some(Fix {
+				time: raw_fix.time as f64,
+				mode: raw_fix.mode as u8,
+				latitude: raw_fix.latitude as f64,
+				longitude: raw_fix.longitude as f64,
+				altitude: raw_fix.altitude as f64
+			})
 		} else {
 			None
 		}

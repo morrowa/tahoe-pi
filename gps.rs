@@ -5,7 +5,8 @@ extern mod extra;
 use self::extra::arc::RWArc;
 
 use std::io::Stream;
-use std::io::net::unix::UnixStream;
+use std::io::net::tcp::TcpStream;
+use std::io::net::ip::SocketAddr;
 use std::io::buffered::BufferedStream;
 
 #[deriving(Clone)]
@@ -22,12 +23,12 @@ pub struct Client {
 }
 
 impl Client {
-	pub fn connect(path: &Path) -> Client {
+	pub fn connect(addr: &SocketAddr) -> Client {
 		let (port, chan) = Chan::new();
 		let client = Client { fix: RWArc::new(None), bg_chan: chan };
 		let background_storage = client.fix.clone();
-		let path_copy = ~path.clone();
-		spawn(proc() { gpsd_listener(path_copy, background_storage, port); });
+		let addr_copy = ~addr.clone();
+		spawn(proc() { gpsd_listener(addr_copy, background_storage, port); });
 		client
 	}
 
@@ -44,8 +45,8 @@ impl Drop for Client {
 	}
 }
 
-fn gpsd_listener(path: ~Path, storage: RWArc<Option<~Fix>>, halt_port: Port<bool>) {
-	let mut stream = gpsd_connect(path);
+fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Port<bool>) {
+	let mut stream = gpsd_connect(addr);
 
 	let (major_vers, _) = gpsd_init(&mut stream);
 
@@ -63,13 +64,13 @@ fn gpsd_listener(path: ~Path, storage: RWArc<Option<~Fix>>, halt_port: Port<bool
 	}
 }
 
-fn gpsd_connect(path: ~Path) -> BufferedStream<UnixStream> {
-	BufferedStream::with_capacities(1536, 81, UnixStream::connect(path).unwrap())
+fn gpsd_connect(addr: ~SocketAddr) -> BufferedStream<TcpStream> {
+	BufferedStream::with_capacities(1536, 81, TcpStream::connect(*addr).unwrap())
 }
 
 fn gpsd_init<S: Stream>(stream: &mut BufferedStream<S>) -> (u32,u32) {
-	stream.write_str(&"?VERSION;\n");
-	stream.flush();
+	//stream.write_str(&"?VERSION;\n");
+	//stream.flush();
 
 	match stream.read_line() {
 		Some(string) => println!("Got response: {}", string),

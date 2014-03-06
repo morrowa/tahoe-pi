@@ -57,13 +57,24 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Por
 		fail!("error: unsupported gpsd protocol version {}", major_vers);
 	}
 
-	loop {
-		//...program code here
+	gpsd_subscribe(&mut stream);
 
-		match halt_port.try_recv() {
-			Some(stop) if stop => break,
-			_ => continue
+	loop {
+		if halt_port.try_recv().unwrap_or(false) {
+			break;
+		}
+
+		println!("trying to read from gpsd...");
+
+		let line = match stream.read_line() {
+			Some(string) => string,
+			None if stream.eof() => break,
+			_ => fail!("gpsd closed socket unexpectedly")
 		};
+
+		print!("Got message from gpsd: {}", line);
+
+		parse_gpsd_response(line, &storage);
 	}
 }
 
@@ -93,5 +104,13 @@ fn gpsd_init<S: Stream>(stream: &mut BufferedStream<S>) -> (u32,u32) {
 	};
 
 	(protocol_major, protocol_minor)
+}
+
+fn gpsd_subscribe<S: Stream>(stream: &mut BufferedStream<S>) {
+	stream.write_line(&"?WATCH={\"enable\":true,\"json\":true}");
+	stream.flush();
+}
+
+fn parse_gpsd_response(response: &str, fix_storage: &RWArc<Option<~Fix>>) {
 }
 

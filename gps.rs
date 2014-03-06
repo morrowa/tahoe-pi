@@ -3,6 +3,7 @@
 
 extern mod extra;
 use self::extra::arc::RWArc;
+use self::extra::json::{Parser, Json, Object, Number};
 
 use std::io::Stream;
 use std::io::net::tcp::TcpStream;
@@ -50,6 +51,8 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Por
 
 	let (major_vers, _) = gpsd_init(&mut stream);
 
+	println!("Got version {}", major_vers);
+
 	if major_vers != 3 {
 		fail!("error: unsupported gpsd protocol version {}", major_vers);
 	}
@@ -69,13 +72,26 @@ fn gpsd_connect(addr: ~SocketAddr) -> BufferedStream<TcpStream> {
 }
 
 fn gpsd_init<S: Stream>(stream: &mut BufferedStream<S>) -> (u32,u32) {
-	//stream.write_str(&"?VERSION;\n");
-	//stream.flush();
-
-	match stream.read_line() {
-		Some(string) => println!("Got response: {}", string),
-		None => fail!("didn't get anything")
+	let protocol_json: Json = match stream.read_line() {
+		Some(string) => Parser::new(string.as_slice().chars()).parse().unwrap(),
+		None => fail!("no protocol response from gpsd")
 	};
-	(3, 1)
+
+	let root_obj = match protocol_json {
+		Object(obj) => obj,
+		_ => fail!("invalid protocol response")
+	};
+
+	let protocol_major = match *(root_obj.find(&~"proto_major").unwrap()) {
+		Number(val) => val as u32,
+		_ => fail!("invalid protocol response")
+	};
+
+	let protocol_minor = match *(root_obj.find(&~"proto_minor").unwrap()) {
+		Number(val) => val as u32,
+		_ => fail!("invalid protocol response")
+	};
+
+	(protocol_major, protocol_minor)
 }
 

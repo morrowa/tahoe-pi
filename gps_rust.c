@@ -29,6 +29,7 @@ int gps_rust_read(gps_rust_client_data clientdata, struct gps_rust_fix* outfix) 
 		outfix->time = realClientData->fix.time;
 		outfix->latitude = realClientData->fix.latitude;
 		outfix->longitude = realClientData->fix.longitude;
+		outfix->altitude = realClientData->fix.altitude;
 	}
 
 	return returncode;

@@ -8,6 +8,7 @@ struct gps_rust_fix {
 	double time;
 	double latitude;
 	double longitude;
+	double altitude;
 };
 
 gps_rust_client_data gps_rust_open(void);

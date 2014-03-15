@@ -1,14 +1,14 @@
 // gps.rs
-// Uses a Unix socket to connect to gpsd.
+// Uses a network socket to connect to gpsd.
 
-extern mod extra;
-use self::extra::arc::RWArc;
-use self::extra::json::{Parser, Json, Object, Number};
+extern crate sync;
+extern crate serialize;
 
-use std::io::Stream;
-use std::io::net::tcp::TcpStream;
+use self::sync::RWArc;
+use self::serialize::json::{Parser, Json, Object, Number};
+use std::io::{Stream, TcpStream, BufferedStream};
 use std::io::net::ip::SocketAddr;
-use std::io::buffered::BufferedStream;
+use std::comm::{Disconnected, Data};
 
 #[deriving(Clone)]
 pub struct Fix {
@@ -20,16 +20,16 @@ pub struct Fix {
 
 pub struct Client {
 	priv fix: RWArc<Option<~Fix>>,
-	priv bg_chan: Chan<bool>
+	priv bg_chan: Sender<bool>
 }
 
 impl Client {
 	pub fn connect(addr: &SocketAddr) -> Client {
-		let (port, chan) = Chan::new();
-		let client = Client { fix: RWArc::new(None), bg_chan: chan };
+		let (tx, rx) = channel();
+		let client = Client { fix: RWArc::new(None), bg_chan: tx };
 		let background_storage = client.fix.clone();
 		let addr_copy = ~addr.clone();
-		spawn(proc() { gpsd_listener(addr_copy, background_storage, port); });
+		spawn(proc() { gpsd_listener(addr_copy, background_storage, rx); });
 		client
 	}
 
@@ -46,7 +46,7 @@ impl Drop for Client {
 	}
 }
 
-fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Port<bool>) {
+fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Receiver<bool>) {
 	let mut stream = gpsd_connect(addr);
 
 	let (major_vers, _) = gpsd_init(&mut stream);
@@ -60,17 +60,15 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Por
 	gpsd_subscribe(&mut stream);
 
 	loop {
-		if halt_port.try_recv().unwrap_or(false) {
-			break;
+		match halt_port.try_recv() {
+			Data(val) if val => break,
+			Disconnected => break,
+			_ => {}
 		}
 
 		println!("trying to read from gpsd...");
 
-		let line = match stream.read_line() {
-			Some(string) => string,
-			None if stream.eof() => break,
-			_ => fail!("gpsd closed socket unexpectedly")
-		};
+		let line = stream.read_line().unwrap();
 
 		print!("Got message from gpsd: {}", line);
 
@@ -83,10 +81,8 @@ fn gpsd_connect(addr: ~SocketAddr) -> BufferedStream<TcpStream> {
 }
 
 fn gpsd_init<S: Stream>(stream: &mut BufferedStream<S>) -> (u32,u32) {
-	let protocol_json: Json = match stream.read_line() {
-		Some(string) => Parser::new(string.as_slice().chars()).parse().unwrap(),
-		None => fail!("no protocol response from gpsd")
-	};
+	let raw_protocol_json = stream.read_line().unwrap();
+	let protocol_json: Json = Parser::new(raw_protocol_json.as_slice().chars()).parse().unwrap();
 
 	let root_obj = match protocol_json {
 		Object(obj) => obj,

@@ -1,6 +1,6 @@
 use std::io::net::ip::SocketAddr;
 use std::io;
-use std::io::buffered::BufferedReader;
+use std::io::BufferedReader;
 
 mod gps;
 

@@ -6,16 +6,16 @@ extern crate serialize;
 
 use self::sync::RWArc;
 use self::serialize::json::{Parser, Json, Object, Number};
-use std::io::{Stream, TcpStream, BufferedStream};
+use std::io::{Stream, TcpStream, BufferedStream, IoResult};
 use std::io::net::ip::SocketAddr;
 use std::comm::{Disconnected, Data};
 
 #[deriving(Clone)]
 pub struct Fix {
-	time: f64,
-	lat: f64,
-	lon: f64,
-	alt: f64
+	time: Option<f64>,
+	lat:  Option<f64>,
+	lon:  Option<f64>,
+	alt:  Option<f64>
 }
 
 pub struct Client {
@@ -57,7 +57,7 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Rec
 		fail!("error: unsupported gpsd protocol version {}", major_vers);
 	}
 
-	gpsd_subscribe(&mut stream);
+	gpsd_subscribe(&mut stream).unwrap();
 
 	loop {
 		match halt_port.try_recv() {
@@ -72,7 +72,10 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Rec
 
 		print!("Got message from gpsd: {}", line);
 
-		parse_gpsd_response(line, &storage);
+		match Parser::new(line.as_slice().chars()).parse().ok().and_then(|j| parse_gpsd_response(&j)) {
+			Some(fix) => storage.write(|opt_ref| *opt_ref = Some(~fix)),
+			_ => {}
+		};
 	}
 }
 
@@ -102,11 +105,21 @@ fn gpsd_init<S: Stream>(stream: &mut BufferedStream<S>) -> (u32,u32) {
 	(protocol_major, protocol_minor)
 }
 
-fn gpsd_subscribe<S: Stream>(stream: &mut BufferedStream<S>) {
-	stream.write_line(&"?WATCH={\"enable\":true,\"json\":true}");
-	stream.flush();
+fn gpsd_subscribe<S: Stream>(stream: &mut BufferedStream<S>) -> IoResult<()> {
+	stream.write_line(&"?WATCH={\"enable\":true,\"json\":true}").and(stream.flush())
 }
 
-fn parse_gpsd_response(response: &str, fix_storage: &RWArc<Option<~Fix>>) {
+fn parse_gpsd_response(response: &Json) -> Option<Fix> {
+	match response.find(&~"class").and_then(|c| c.as_string()) {
+		Some(class) if class == "TPV" => {},
+		_ => return None
+	};
+	Some(Fix {
+		// TODO actually parse the date instead of just failing (it's a string)
+		time: response.find(&~"time").and_then(|t| t.as_number()),
+		lat: response.find(&~"lat").and_then(|l| l.as_number()),
+		lon: response.find(&~"lon").and_then(|l| l.as_number()),
+		alt: response.find(&~"alt").and_then(|a| a.as_number())
+	})
 }
 

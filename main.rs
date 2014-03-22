@@ -15,7 +15,7 @@ fn main() {
 
 	let mut in_pipe = BufferedReader::new(io::stdin());
 
-	in_pipe.read_line();
+	let _ = in_pipe.read_line();
 
 	match client.read() {
 		Some(real_fix) => println!("Got a fix at {}, {}", real_fix.lat, real_fix.lon),

@@ -11,7 +11,16 @@ use std::io::net::ip::SocketAddr;
 use std::comm::{Disconnected, Data};
 
 #[deriving(Clone)]
+pub enum GpsMode {
+	NoModeSeen = 0,
+	NoFix = 1,
+	Fix2d = 2,
+	Fix3d = 3
+}
+
+#[deriving(Clone)]
 pub struct Fix {
+	mode: GpsMode,
 	time: Option<f64>,
 	lat:  Option<f64>,
 	lon:  Option<f64>,
@@ -115,6 +124,15 @@ fn parse_gpsd_response(response: &Json) -> Option<Fix> {
 		_ => return None
 	};
 	Some(Fix {
+		mode: match response.find(&~"mode").and_then(|m| m.as_number()) {
+			      Some(m) => match m {
+				      1f64 => NoFix,
+				      2f64 => Fix2d,
+				      3f64 => Fix3d,
+				      _ => NoModeSeen
+			      },
+			      _ => NoModeSeen
+		      },
 		// TODO actually parse the date instead of just failing (it's a string)
 		time: response.find(&~"time").and_then(|t| t.as_number()),
 		lat: response.find(&~"lat").and_then(|l| l.as_number()),

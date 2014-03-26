@@ -3,9 +3,11 @@
 
 extern crate sync;
 extern crate serialize;
+extern crate time;
 
 use self::sync::RWArc;
 use self::serialize::json::{Parser, Json, Object, Number};
+use self::time::{strptime, Timespec};
 use std::io::{Stream, TcpStream, BufferedStream, IoResult};
 use std::io::net::ip::SocketAddr;
 use std::comm::{Disconnected, Data};
@@ -21,7 +23,7 @@ pub enum GpsMode {
 #[deriving(Clone)]
 pub struct Fix {
 	mode: GpsMode,
-	time: Option<f64>,
+	time: Option<Timespec>,
 	lat:  Option<f64>,
 	lon:  Option<f64>,
 	alt:  Option<f64>
@@ -60,8 +62,6 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Rec
 
 	let (major_vers, _) = gpsd_init(&mut stream);
 
-	println!("Got version {}", major_vers);
-
 	if major_vers != 3 {
 		fail!("error: unsupported gpsd protocol version {}", major_vers);
 	}
@@ -75,11 +75,7 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Rec
 			_ => {}
 		}
 
-		println!("trying to read from gpsd...");
-
 		let line = stream.read_line().unwrap();
-
-		print!("Got message from gpsd: {}", line);
 
 		match Parser::new(line.as_slice().chars()).parse().ok().and_then(|j| parse_gpsd_response(&j)) {
 			Some(fix) => storage.write(|opt_ref| *opt_ref = Some(~fix)),
@@ -133,8 +129,7 @@ fn parse_gpsd_response(response: &Json) -> Option<Fix> {
 			      },
 			      _ => NoModeSeen
 		      },
-		// TODO actually parse the date instead of just failing (it's a string)
-		time: response.find(&~"time").and_then(|t| t.as_number()),
+		time: response.find(&~"time").and_then(|t| t.as_string()).and_then(|t| strptime(t, "%FT%T.%fZ").ok()).and_then(|t| Some(t.to_timespec())),
 		lat: response.find(&~"lat").and_then(|l| l.as_number()),
 		lon: response.find(&~"lon").and_then(|l| l.as_number()),
 		alt: response.find(&~"alt").and_then(|a| a.as_number())

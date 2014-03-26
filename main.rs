@@ -26,9 +26,11 @@ fn main() {
 fn print_fix(fix: &gps::Fix) {
 	let m: gps::GpsMode = fix.mode;
 	match m {
-		gps::Fix2d => println!("{}, {}", fix.lat.unwrap(), fix.lon.unwrap()),
-		gps::Fix3d => println!("{}, {}", fix.lat.unwrap(), fix.lon.unwrap()),
-		_ => println!("No fix")
+		gps::Fix2d => {},
+		gps::Fix3d => {},
+		_ => { println!("No fix"); return }
 	};
+
+	println!("{}, {} ({})", fix.lat.unwrap(), fix.lon.unwrap(), fix.time.unwrap());
 }
 

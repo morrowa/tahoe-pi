@@ -18,7 +18,7 @@ fn main() {
 	let _ = in_pipe.read_line();
 
 	match client.read() {
-		Some(fix) => print_fix(fix),
+		Some(fix) => print_fix(&fix),
 		_ => println!("No fix")
 	}
 }

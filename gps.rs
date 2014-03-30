@@ -5,7 +5,7 @@ extern crate sync;
 extern crate serialize;
 extern crate time;
 
-use self::sync::RWArc;
+use self::sync::{RWLock, Arc};
 use self::serialize::json::{Parser, Json, Object, Number};
 use self::time::{strptime, Timespec};
 use std::io::{Stream, TcpStream, BufferedStream, IoResult};
@@ -30,24 +30,22 @@ pub struct Fix {
 }
 
 pub struct Client {
-	priv fix: RWArc<Option<~Fix>>,
+	priv fix: Arc<RWLock<Option<Fix>>>,
 	priv bg_chan: Sender<bool>
 }
 
 impl Client {
 	pub fn connect(addr: &SocketAddr) -> Client {
 		let (tx, rx) = channel();
-		let client = Client { fix: RWArc::new(None), bg_chan: tx };
+		let client = Client { fix: Arc::new(RWLock::new(None)), bg_chan: tx };
 		let background_storage = client.fix.clone();
 		let addr_copy = ~addr.clone();
 		spawn(proc() { gpsd_listener(addr_copy, background_storage, rx); });
 		client
 	}
 
-	pub fn read(&self) -> Option<~Fix> {
-		self.fix.read(|data: &Option<~Fix>| -> Option<~Fix> {
-			data.clone()
-		})
+	pub fn read(&self) -> Option<Fix> {
+		*(self.fix.read())
 	}
 }
 
@@ -57,7 +55,7 @@ impl Drop for Client {
 	}
 }
 
-fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Receiver<bool>) {
+fn gpsd_listener(addr: ~SocketAddr, storage: Arc<RWLock<Option<Fix>>>, halt_port: Receiver<bool>) {
 	let mut stream = gpsd_connect(addr);
 
 	let (major_vers, _) = gpsd_init(&mut stream);
@@ -78,7 +76,10 @@ fn gpsd_listener(addr: ~SocketAddr, storage: RWArc<Option<~Fix>>, halt_port: Rec
 		let line = stream.read_line().unwrap();
 
 		match Parser::new(line.as_slice().chars()).parse().ok().and_then(|j| parse_gpsd_response(&j)) {
-			Some(fix) => storage.write(|opt_ref| *opt_ref = Some(~fix)),
+			Some(fix) => {
+				let mut val = storage.write();
+				*val = Some(fix);
+			},
 			_ => {}
 		};
 	}

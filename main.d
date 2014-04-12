@@ -16,11 +16,11 @@ int main(char [][] args) {
 
 	assert(sock.isAlive);
 
+	sock.send("?WATCH={\"enable\":true,\"json\":true};\n");
+
 	char[] buf = new char[1536];
 
-	auto bytesRead = sock.receive(buf);
-
-	if (bytesRead > 0) {
+	for (auto bytesRead = sock.receive(buf); bytesRead > 0; bytesRead = sock.receive(buf)) {
 		writeln(buf[0..bytesRead]);
 	}
 

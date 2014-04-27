@@ -25,8 +25,13 @@ func main() {
 	err = json.Unmarshal(hello, &version)
 	if err != nil {
 		log.Fatal(err)
-	} else {
-		fmt.Printf("GPSD Version: %d.%d\n", version.Proto_major, version.Proto_minor)
+	} else if version.Proto_major != 3 {
+		log.Fatal("Only version 3.x of the gpsd protocol is supported (found version %d.%d)", version.Proto_major, version.Proto_minor)
+	}
+
+	_, err = fmt.Fprintln(conn, "?WATCH={\"enable\": true, \"json\": true}")
+	if err != nil {
+		log.Fatal(err)
 	}
 }
 

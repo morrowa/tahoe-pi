@@ -1,11 +1,15 @@
 package main
 
-import ("net"; "bufio"; "log"; "fmt"; "encoding/json")
+import ("net"; "bufio"; "log"; "fmt"; "encoding/json"; "time")
 
 type gpsdVersion struct {
 	Class string
 	Proto_major uint8
 	Proto_minor uint8
+}
+
+type genericGPSDResponse struct {
+	Class string
 }
 
 type TPVReport struct {
@@ -46,8 +50,12 @@ func main() {
 
 	go gpsdListen(&conn, reports)
 
-	sync := make(chan bool)
-	<-sync
+	for {
+		pos := <-reports
+		fmt.Printf("Lat: %f\n", pos.Lat)
+		fmt.Printf("Lon: %f\n", pos.Lon)
+		time.Sleep(time.Second)
+	}
 }
 
 func gpsdListen(conn *net.Conn, responses chan<- TPVReport) {
@@ -60,7 +68,15 @@ func gpsdListen(conn *net.Conn, responses chan<- TPVReport) {
 	for {
 		select {
 		case line := <-lines:
-			print(line)
+			var response genericGPSDResponse
+			err := json.Unmarshal(line, &response)
+			if err == nil && response.Class == "TPV" {
+				var currentReport TPVReport
+				err = json.Unmarshal(line, &currentReport)
+				if err == nil {
+					latestReport = currentReport
+				}
+			}
 		case responses <- latestReport:
 		}
 	}

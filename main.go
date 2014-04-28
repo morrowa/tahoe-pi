@@ -8,6 +8,14 @@ type gpsdVersion struct {
 	Proto_minor uint8
 }
 
+type TPVReport struct {
+	Mode uint8
+	Time string
+	Lat float64
+	Lon float64
+	Alt float64
+}
+
 func main() {
 	conn, err := net.Dial("tcp", "127.0.0.1:2947")
 	if err != nil {
@@ -32,6 +40,42 @@ func main() {
 	_, err = fmt.Fprintln(conn, "?WATCH={\"enable\": true, \"json\": true}")
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	reports := make(chan TPVReport)
+
+	go gpsdListen(&conn, reports)
+
+	sync := make(chan bool)
+	<-sync
+}
+
+func gpsdListen(conn *net.Conn, responses chan<- TPVReport) {
+	lines := make(chan []byte)
+
+	go readLines(conn, lines)
+
+	var latestReport TPVReport
+
+	for {
+		select {
+		case line := <-lines:
+			print(line)
+		case responses <- latestReport:
+		}
+	}
+}
+
+func readLines(conn *net.Conn, lines chan<- []byte) {
+	reader := bufio.NewReader(*conn)
+
+	for {
+		buff, err := reader.ReadBytes('\n')
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		lines <- buff
 	}
 }
 

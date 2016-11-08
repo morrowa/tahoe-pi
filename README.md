@@ -10,3 +10,5 @@ Copyright © 2014 Andrew Morrow. All rights reserved.
 
 Released under the BSD license.
 
+# Abandoned
+This repository (and the project it was part of) have been abandoned. Please feel free to fork/re-use, but do not expect any support or further commits.
